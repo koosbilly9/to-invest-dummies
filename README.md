@@ -14,7 +14,7 @@ A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100
 
 ## Deploy and refresh
 
-The front end is static and can be hosted on GitHub Pages. It reuses the existing `crypto-proxy` Worker from `../to-crypto-buy-sell-signals`; the Worker also needs its `/history` route. To publish those changes, run `npx wrangler deploy` from that sibling project, then reload the page or press **Refresh data**. The existing `CMC_RATE_LIMITER` binding and optional `CMC_KEY` secret are reused.
+The front end is static and can be hosted on GitHub Pages. It uses the `to-invest-dummies` Worker in `cloudflare/worker.js` for market-data requests. From this project root, run `bun x wrangler deploy`, then reload the page or press **Refresh data**. The Worker has its own `CMC_RATE_LIMITER` binding and supports an optional `CMC_KEY` secret.
 
 The Worker permits the GitHub Pages origin and the opaque `null` origin used by local `file://` previews. It only returns public market data, and requests remain rate-limited; `null` is not an authentication mechanism. Market data is cached upstream and in each browser for one hour.
 

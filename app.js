@@ -2,7 +2,7 @@
   "use strict";
 
   var DAY = 86400000;
-  var WORKER = "https://crypto-proxy.koosbilly9.workers.dev";
+  var WORKER = "https://to-invest-dummies.koosbilly9.workers.dev";
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
   var CACHE_KEY = "invest-dummies-market-v4";
