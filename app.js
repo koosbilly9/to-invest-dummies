@@ -192,6 +192,13 @@
     return Number.isFinite(value) ? value.toFixed(2) + "%" : "—";
   }
 
+  function percentClass(value) {
+    if (!Number.isFinite(value)) return "";
+    if (value <= 10) return "percent-warning";
+    if (value <= 40) return "";
+    return "percent-good";
+  }
+
   function percentBelowHigh(current, high) {
     return Number.isFinite(current) && Number.isFinite(high) && high > 0
       ? Math.max(0, (high - current) / high * 100)
@@ -204,6 +211,10 @@
       var signal = sentiment(result.indicators ? result.indicators.rsi : null);
       var cycle = result.indicators && result.indicators.cycle;
       var cycleClass = cycle === "Bull" ? "positive" : cycle === "Bear" ? "negative" : "";
+      var percentBelow = percentBelowHigh(
+        result.indicators && result.indicators.current,
+        result.indicators && result.indicators.high
+      );
       var fear = asset.type === "crypto" && data.fearGreed
         ? '<span class="value">' + data.fearGreed.value + '</span><div class="asset-sub">' + escapeHtml(data.fearGreed.label) + "</div>"
         : "—";
@@ -219,7 +230,7 @@
         '<td><span class="sentiment ' + signal.cls + '">' + signal.text + "</span></td>" +
         '<td class="value">' + formatPrice(indicators.current, asset.currency) + "</td>" +
         '<td class="value">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
-        '<td class="value">' + displayPercent(percentBelowHigh(indicators.current, indicators.high)) + "</td>" +
+        '<td class="value ' + percentClass(percentBelow) + '">' + displayPercent(percentBelow) + "</td>" +
         '<td class="' + cycleClass + '">' + (cycle || "—") + "</td>" +
         "</tr>";
     });
@@ -262,7 +273,13 @@
           if (!quote) throw new Error("CoinMarketCap has no USD listing for " + asset.key);
           return cryptoHistory(asset.symbol).then(function (history) {
             var indicators = calculateIndicators(history);
-            indicators.current = number(quote.price);
+            var current = number(quote.price);
+            indicators.current = current;
+            if (Number.isFinite(current)) {
+              if (Number.isFinite(indicators.high)) indicators.high = Math.max(indicators.high, current);
+              if (Number.isFinite(indicators.low)) indicators.low = Math.min(indicators.low, current);
+              if (Number.isFinite(indicators.ma200)) indicators.cycle = current >= indicators.ma200 ? "Bull" : "Bear";
+            }
             data[asset.key] = { indicators: indicators };
           }).catch(function (error) {
             data[asset.key] = { error: "History unavailable", indicators: { current: number(quote.price) } };
@@ -317,6 +334,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       calculateIndicators: calculateIndicators,
+      percentClass: percentClass,
       percentBelowHigh: percentBelowHigh,
       sentiment: sentiment
     };

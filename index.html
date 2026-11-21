@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f7f4">
+  <meta name="theme-color" content="#f5f7f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101914" media="(prefers-color-scheme: dark)">
   <title>Invest like a dummy</title>
   <style>
     :root {
@@ -17,7 +18,7 @@
       --green-soft: #e8f4ec;
       --red: #b94b43;
       --red-soft: #fbecea;
-      --gold: #f1c75b;
+      --orange: #a85600;
       --shadow: 0 16px 42px #20352b0d;
     }
     @media (prefers-color-scheme: dark) {
@@ -32,7 +33,7 @@
         --green-soft: #1b3929;
         --red: #ff9186;
         --red-soft: #402522;
-        --gold: #f1c75b;
+        --orange: #ffb454;
         --shadow: 0 16px 42px #0003;
       }
     }
@@ -81,10 +82,10 @@
     table { width: 100%; min-width: 900px; border-collapse: collapse; }
     th, td { padding: 13px 15px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
     th { color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
-    th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; }
+    th:first-child, td:first-child:not([colspan]) { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; }
     th:first-child { z-index: 2; }
+    td:first-child[colspan] { text-align: left; }
     tbody tr:hover td { background: color-mix(in srgb, var(--green-soft) 46%, var(--card)); }
-    tbody tr:hover td:first-child { background: var(--card); }
     .asset { display: flex; min-width: 195px; align-items: center; gap: 10px; }
     .coin-icon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 800; }
     .asset-name { font-weight: 720; }
@@ -93,6 +94,8 @@
     .sentiment { display: inline-flex; min-width: 92px; justify-content: center; padding: 4px 9px; border-radius: 99px; font-size: 12px; font-weight: 700; }
     .positive { color: var(--green); }
     .negative { color: var(--red); }
+    .percent-good { color: var(--green); }
+    .percent-warning { color: var(--orange); }
     .pill-neutral { background: var(--line); color: var(--muted); }
     .pill-positive { background: var(--green-soft); color: var(--green); }
     .pill-negative { background: var(--red-soft); color: var(--red); }
@@ -101,6 +104,7 @@
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
     .dot.red { background: var(--red); }
+    .dot.orange { background: var(--orange); }
     footer { max-width: 90ch; padding: 22px 0 38px; color: var(--muted); font-size: 12px; line-height: 1.7; }
     footer a { color: var(--green); }
     :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
@@ -148,8 +152,8 @@
                 <th scope="col">Oversold / bought</th>
                 <th scope="col">Current price</th>
                 <th scope="col">MA200</th>
-                <th scope="col">% below</th>
-                <th scope="col">Bear / bull cycle</th>
+                <th scope="col">% &lt; 5y high</th>
+                <th scope="col">Cycle</th>
               </tr>
             </thead>
             <tbody id="assets">
@@ -159,8 +163,9 @@
         </div>
         <div class="message" id="notice" role="status"></div>
         <div class="legend" aria-label="Indicator definitions">
-          <span><i class="dot"></i> Oversold / bull</span>
-          <span><i class="dot red"></i> Overbought / bear</span>
+          <span><i class="dot" aria-hidden="true"></i> Oversold / bull / &gt;40% below 5y high</span>
+          <span><i class="dot red" aria-hidden="true"></i> Overbought / bear</span>
+          <span><i class="dot orange" aria-hidden="true"></i> Within 10% of 5y high</span>
           <span>RSI(14): under 30 = oversold, over 70 = overbought</span>
         </div>
       </section>
