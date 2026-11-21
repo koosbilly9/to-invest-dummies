@@ -8,11 +8,11 @@
   var CACHE_KEY = "invest-dummies-market-v3";
   var CACHE_MS = 60 * 60 * 1000;
   var ASSETS = [
-    { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD" },
-    { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD" },
-    { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD" },
-    { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", currency: "USD" },
-    { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", currency: "USD" },
+    { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
+    { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
+    { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD", url: "https://solana.com", slug: "solana" },
+    { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
+    { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", currency: "USD", url: "https://www.nasdaq.com/solutions/nasdaq-100", quoteUrl: "https://finance.yahoo.com/quote/%5ENDX/" },
     { key: "CORONATION", name: "Coronation Top 20", type: "fund", currency: "ZAR" }
   ];
 
@@ -222,8 +222,18 @@
       var status = result.error
         ? '<div class="asset-sub">' + escapeHtml(result.error) + "</div>"
         : "";
+      var nameHtml = asset.url
+        ? '<a href="' + escapeHtml(asset.url) + '" target="_blank" rel="noopener">' + escapeHtml(asset.name) + "</a>"
+        : escapeHtml(asset.name);
+      var slug = result.slug || asset.slug;
+      var tickerHref = slug
+        ? "https://coinmarketcap.com/currencies/" + encodeURIComponent(slug) + "/"
+        : asset.quoteUrl || "";
+      var tickerHtml = tickerHref
+        ? '<a href="' + escapeHtml(tickerHref) + '" target="_blank" rel="noopener">' + escapeHtml(asset.key) + "</a>"
+        : escapeHtml(asset.key);
       return "<tr>" +
-        '<td><div class="asset"><span class="coin-icon">' + escapeHtml(asset.key === "NASDAQ100" ? "N100" : asset.key === "CORONATION" ? "C20" : asset.key === "SP500" ? "S&P" : asset.key) + '</span><div><div class="asset-name">' + escapeHtml(asset.name) + '</div><div class="asset-sub">' + escapeHtml(asset.key) + status + "</div></div></div></td>" +
+        '<td><div class="asset"><span class="coin-icon">' + escapeHtml(asset.key === "NASDAQ100" ? "N100" : asset.key === "CORONATION" ? "C20" : asset.key === "SP500" ? "S&P" : asset.key) + '</span><div><div class="asset-name">' + nameHtml + '</div><div class="asset-sub">' + tickerHtml + status + "</div></div></div></td>" +
         "<td>" + fear + "</td>" +
         '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
         '<td class="value">' + formatPrice(result.indicators && result.indicators.low, asset.currency) + "</td>" +
@@ -280,9 +290,9 @@
               if (Number.isFinite(indicators.low)) indicators.low = Math.min(indicators.low, current);
               if (Number.isFinite(indicators.ma200)) indicators.cycle = current >= indicators.ma200 ? "Bull" : "Bear";
             }
-            data[asset.key] = { indicators: indicators };
+            data[asset.key] = { slug: item.slug || asset.slug, indicators: indicators };
           }).catch(function (error) {
-            data[asset.key] = { error: "History unavailable", indicators: { current: number(quote.price) } };
+            data[asset.key] = { slug: item.slug || asset.slug, error: "History unavailable", indicators: { current: number(quote.price) } };
             errors.push(asset.key + " history: " + error.message);
           });
         }));

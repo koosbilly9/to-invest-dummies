@@ -5,7 +5,7 @@ A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100
 ## Data and indicators
 
 - Crypto prices: CoinMarketCap. Crypto history: Binance daily candles.
-- Index history: Yahoo Finance daily candles for `^GSPC` and `^NDX`.
+- Index history: Yahoo Finance (`^GSPC` and `^NDX` chart API and history page fallback) and Stooq (`^spx` and `^ndx` free daily CSV feed).
 - Fear/greed: Alternative.me's crypto index, shown for crypto only.
 - Oversold/overbought: RSI(14), under 30/over 70. Bull/bear: latest completed close above/below its 200-day simple moving average.
 - Five-year high/low: highest daily candle high and lowest daily candle low over the available five-year history.

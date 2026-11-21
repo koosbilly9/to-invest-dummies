@@ -90,6 +90,8 @@
     .coin-icon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 800; }
     .asset-name { font-weight: 720; }
     .asset-sub { color: var(--muted); font-size: 11px; }
+    .asset-name a, .asset-sub a { color: inherit; text-decoration: none; }
+    .asset-name a:hover, .asset-sub a:hover { text-decoration: underline; }
     .value { font-variant-numeric: tabular-nums; }
     .sentiment { display: inline-flex; min-width: 92px; justify-content: center; padding: 4px 9px; border-radius: 99px; font-size: 12px; font-weight: 700; }
     .positive { color: var(--green); }
@@ -171,7 +173,7 @@
       </section>
     </main>
     <footer>
-      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance. Fear/greed is Alternative.me’s crypto index and appears only for crypto. The Coronation Top 20 fund is not a listed index and currently has no verified public historical feed in this page, so its values are shown as unavailable rather than estimated. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
+      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Fear/greed is Alternative.me’s crypto index and appears only for crypto. The Coronation Top 20 fund is not a listed index and currently has no verified public historical feed in this page, so its values are shown as unavailable rather than estimated. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
     </footer>
   </div>
   <script src="app.js"></script>
