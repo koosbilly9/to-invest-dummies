@@ -108,26 +108,36 @@
     .dot.red { background: var(--red); }
     .dot.orange { background: var(--orange); }
     .board + .board { margin-top: 24px; }
-    .money-grid {
-      display: grid;
-      grid-template-columns: minmax(240px, 340px) 1fr;
-      align-items: center;
-      gap: 28px;
-      padding: 8px 22px 24px;
+    .money-stage {
+      padding: 12px 22px 24px;
       border-top: 1px solid var(--line);
     }
-    .chart-box {
-      position: relative;
+    .pie3d-wrap {
       width: 100%;
-      max-width: 300px;
-      aspect-ratio: 1;
+      max-width: 920px;
       margin: 0 auto;
+    }
+    .pie3d-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+    .pie3d-slice {
+      cursor: pointer;
+      transition: transform .18s ease, filter .18s ease;
+    }
+    .pie3d-slice:hover,
+    .pie3d-slice:focus-visible {
+      transform: translateY(-9px);
+      filter: brightness(1.06);
+      outline: none;
     }
     .money-list {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 12px;
-      margin: 0;
+      margin: 14px 0 0;
       padding: 0;
       list-style: none;
     }
@@ -136,10 +146,15 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 13px 15px;
+      padding: 12px 15px;
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--paper);
+      transition: border-color .15s ease, transform .15s ease;
+    }
+    .money-item.is-active {
+      border-color: var(--green);
+      transform: translateY(-2px);
     }
     .money-label {
       display: flex;
@@ -160,7 +175,7 @@
     footer a { color: var(--green); }
     :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
     @media (max-width: 720px) {
-      .money-grid { grid-template-columns: 1fr; padding: 16px 17px 20px; }
+      .money-stage { padding: 12px 14px 20px; }
     }
     @media (max-width: 600px) {
       .page { width: min(100% - 24px, 1180px); }
@@ -227,13 +242,13 @@
         <div class="board-head">
           <div>
             <h2 id="money-market-heading">Global money vs. hard assets</h2>
-            <div class="asset-sub">Estimated global market cap in USD trillions (M2 fiat, gold, silver, and all crypto)</div>
+            <div class="asset-sub">3D stepped breakdown of estimated global market cap in USD trillions (M2 fiat, gold, silver, and all crypto)</div>
           </div>
           <div class="updated" id="money-market-updated" role="status">Loading global money breakdown…</div>
         </div>
-        <div class="money-grid">
-          <div class="chart-box">
-            <canvas id="money-market-chart" aria-label="Global money market cap doughnut chart" role="img"></canvas>
+        <div class="money-stage">
+          <div class="pie3d-wrap">
+            <svg class="pie3d-svg" id="money-market-chart" viewBox="0 0 900 450" role="img" aria-label="3D stepped pie chart of global money market cap"></svg>
           </div>
           <ul class="money-list" id="money-market-list" aria-label="Global money market cap breakdown"></ul>
         </div>
@@ -243,7 +258,6 @@
       Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Coronation Top 20 (Class A, JSE code CNTF) five-year daily NAV history is sourced from Moneyweb / ProfileData. Global money market cap compares baseline Global Fiat M2 ($103.9T), Gold ($24.6T), and Silver ($2.3T) with live total cryptocurrency market cap from CoinGecko ($2.0T fallback). Fear/greed is Alternative.me’s crypto index and appears only for crypto. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
     </footer>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

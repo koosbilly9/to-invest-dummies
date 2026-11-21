@@ -14,7 +14,6 @@
     silver: 2.3,
     cryptoFallback: 2.0
   };
-  var moneyMarketChart = null;
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
     { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
@@ -348,6 +347,202 @@
     });
   }
 
+  function shadeHexColor(hex, factor) {
+    var clean = String(hex || "").replace("#", "");
+    if (clean.length !== 6) return hex;
+    var r = Math.max(0, Math.min(255, Math.round(parseInt(clean.slice(0, 2), 16) * factor)));
+    var g = Math.max(0, Math.min(255, Math.round(parseInt(clean.slice(2, 4), 16) * factor)));
+    var b = Math.max(0, Math.min(255, Math.round(parseInt(clean.slice(4, 6), 16) * factor)));
+    return "#" + [r, g, b].map(function (v) { return v.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  function build3dPieSvg(payload) {
+    var byName = {};
+    payload.assets.forEach(function (a) { byName[a.name] = a; });
+    var gold = byName["Gold"] || { name: "Gold", valueTrillions: 24.6, sharePercent: 18.52, color: "#eab308" };
+    var silver = byName["Silver"] || { name: "Silver", valueTrillions: 2.3, sharePercent: 1.73, color: "#94a3b8" };
+    var crypto = byName["Cryptocurrencies"] || { name: "Cryptocurrencies", valueTrillions: 2.0, sharePercent: 1.51, color: "#10b981" };
+    var fiat = byName["Global Fiat (M2)"] || { name: "Global Fiat (M2)", valueTrillions: 103.9, sharePercent: 78.24, color: "#2563eb" };
+
+    var cx = 450;
+    var cy = 268;
+    var rx = 192;
+    var ry = 102;
+    var deg = Math.PI / 180;
+
+    // Stepped slices ordered back-to-front (painter's algorithm):
+    // 1. Gold (back-top, tallest step)
+    // 2. Silver (mid-left, medium-tall step)
+    // 3. Cryptocurrencies (mid-right, medium step)
+    // 4. Global Fiat M2 (front-bottom, wide base step)
+    var slices = [
+      {
+        key: "gold",
+        asset: gold,
+        caption: "Above-ground gold reserves (~212.6k metric tons)",
+        start: 222 * deg,
+        end: 320 * deg,
+        height: 64,
+        labelRadius: 0.56,
+        callout: { x: 450, y: 26, align: "middle", anchorX: 450, anchorY: 74, lineEndR: 0.78 }
+      },
+      {
+        key: "silver",
+        asset: silver,
+        caption: "Above-ground silver supply (~1.74M metric tons)",
+        start: 174 * deg,
+        end: 222 * deg,
+        height: 46,
+        labelRadius: 0.66,
+        callout: { x: 24, y: 120, align: "start", anchorX: 205, anchorY: 162, lineEndR: 0.84 }
+      },
+      {
+        key: "crypto",
+        asset: crypto,
+        caption: "All cryptocurrencies combined (live via CoinGecko)",
+        start: 320 * deg,
+        end: 366 * deg,
+        height: 36,
+        labelRadius: 0.66,
+        callout: { x: 876, y: 126, align: "end", anchorX: 695, anchorY: 168, lineEndR: 0.84 }
+      },
+      {
+        key: "fiat",
+        asset: fiat,
+        caption: "Global M2 broad money across major economies",
+        start: 6 * deg,
+        end: 174 * deg,
+        height: 24,
+        labelRadius: 0.56,
+        callout: { x: 24, y: 356, align: "start", anchorX: 215, anchorY: 368, lineEndR: 0.78 }
+      }
+    ];
+
+    function pt(angle, h, rScale) {
+      var scale = rScale == null ? 1 : rScale;
+      return {
+        x: +(cx + rx * scale * Math.cos(angle)).toFixed(2),
+        y: +(cy + ry * scale * Math.sin(angle) - (h || 0)).toFixed(2)
+      };
+    }
+
+    function sectorPath(a0, a1, h) {
+      var p0 = pt(a0, h);
+      var p1 = pt(a1, h);
+      var large = (a1 - a0) > Math.PI ? 1 : 0;
+      return "M " + cx + " " + (cy - h) +
+        " L " + p0.x + " " + p0.y +
+        " A " + rx + " " + ry + " 0 " + large + " 1 " + p1.x + " " + p1.y +
+        " Z";
+    }
+
+    function rimPath(a0, a1, h) {
+      var top0 = pt(a0, h);
+      var top1 = pt(a1, h);
+      var bot1 = pt(a1, 0);
+      var bot0 = pt(a0, 0);
+      var large = (a1 - a0) > Math.PI ? 1 : 0;
+      return "M " + top0.x + " " + top0.y +
+        " A " + rx + " " + ry + " 0 " + large + " 1 " + top1.x + " " + top1.y +
+        " L " + bot1.x + " " + bot1.y +
+        " A " + rx + " " + ry + " 0 " + large + " 0 " + bot0.x + " " + bot0.y +
+        " Z";
+    }
+
+    function cutWallPath(angle, h) {
+      var topRim = pt(angle, h);
+      var botRim = pt(angle, 0);
+      return "M " + cx + " " + (cy - h) +
+        " L " + topRim.x + " " + topRim.y +
+        " L " + botRim.x + " " + botRim.y +
+        " L " + cx + " " + cy + " Z";
+    }
+
+    var defs = '<defs>' +
+      '<radialGradient id="pieFloorShadow" cx="50%" cy="50%" r="50%">' +
+        '<stop offset="0%" stop-color="#000" stop-opacity="0.28"/>' +
+        '<stop offset="72%" stop-color="#000" stop-opacity="0.10"/>' +
+        '<stop offset="100%" stop-color="#000" stop-opacity="0"/>' +
+      "</radialGradient>" +
+      slices.map(function (s) {
+        var base = s.asset.color;
+        var light = shadeHexColor(base, 1.12);
+        var mid = shadeHexColor(base, 0.84);
+        var dark = shadeHexColor(base, 0.66);
+        return '<linearGradient id="top-' + s.key + '" x1="0%" y1="0%" x2="100%" y2="100%">' +
+            '<stop offset="0%" stop-color="' + light + '"/>' +
+            '<stop offset="100%" stop-color="' + base + '"/>' +
+          "</linearGradient>" +
+          '<linearGradient id="rim-' + s.key + '" x1="0%" y1="0%" x2="100%" y2="0%">' +
+            '<stop offset="0%" stop-color="' + dark + '"/>' +
+            '<stop offset="50%" stop-color="' + mid + '"/>' +
+            '<stop offset="100%" stop-color="' + dark + '"/>' +
+          "</linearGradient>";
+      }).join("") +
+    "</defs>";
+
+    var shadow = '<ellipse cx="' + cx + '" cy="' + (cy + 14) + '" rx="' + (rx + 22) + '" ry="' + (ry + 14) + '" fill="url(#pieFloorShadow)"/>';
+
+    var sliceGroups = slices.map(function (s, idx) {
+      var cutColor = shadeHexColor(s.asset.color, 0.72);
+      var strokeColor = shadeHexColor(s.asset.color, 0.58);
+      var midAngle = (s.start + s.end) / 2;
+      var labelPos = pt(midAngle, s.height, s.labelRadius);
+      var lineStart = pt(midAngle, s.height, s.callout.lineEndR);
+      var pctNum = Number(s.asset.sharePercent);
+      var pctText = (pctNum >= 10 ? pctNum.toFixed(1) : pctNum.toFixed(2)) + "%";
+
+      var walls = "";
+      if (s.key === "gold") {
+        walls = '<path d="' + rimPath(s.start, s.end, s.height) + '" fill="url(#rim-' + s.key + ')"/>' +
+          '<path d="' + cutWallPath(s.start, s.height) + '" fill="' + cutColor + '"/>' +
+          '<path d="' + cutWallPath(s.end, s.height) + '" fill="' + shadeHexColor(s.asset.color, 0.78) + '"/>';
+      } else if (s.key === "silver") {
+        walls = '<path d="' + cutWallPath(s.end, s.height) + '" fill="' + cutColor + '"/>' +
+          '<path d="' + rimPath(s.start, s.end, s.height) + '" fill="url(#rim-' + s.key + ')"/>' +
+          '<path d="' + cutWallPath(s.start, s.height) + '" fill="' + shadeHexColor(s.asset.color, 0.76) + '"/>';
+      } else if (s.key === "crypto") {
+        walls = '<path d="' + cutWallPath(s.start, s.height) + '" fill="' + cutColor + '"/>' +
+          '<path d="' + rimPath(s.start, s.end, s.height) + '" fill="url(#rim-' + s.key + ')"/>' +
+          '<path d="' + cutWallPath(s.end, s.height) + '" fill="' + shadeHexColor(s.asset.color, 0.76) + '"/>';
+      } else {
+        walls = '<path d="' + cutWallPath(s.start, s.height) + '" fill="' + cutColor + '"/>' +
+          '<path d="' + cutWallPath(s.end, s.height) + '" fill="' + cutColor + '"/>' +
+          '<path d="' + rimPath(s.start, s.end, s.height) + '" fill="url(#rim-' + s.key + ')"/>';
+      }
+
+      var topFace = '<path d="' + sectorPath(s.start, s.end, s.height) + '" fill="url(#top-' + s.key + ')" stroke="' + strokeColor + '" stroke-width="0.8"/>';
+
+      var extrudedText = [4, 3, 2, 1].map(function (offset) {
+        return '<text x="' + (labelPos.x + offset * 0.9) + '" y="' + (labelPos.y + offset * 1.15) + '" text-anchor="middle" dominant-baseline="central" fill="#0d1713" font-size="25" font-weight="900" letter-spacing="-0.03em">' + escapeHtml(pctText) + "</text>";
+      }).join("") +
+      '<text x="' + labelPos.x + '" y="' + labelPos.y + '" text-anchor="middle" dominant-baseline="central" fill="#ffffff" stroke="#0d1713" stroke-width="0.7" font-size="25" font-weight="900" letter-spacing="-0.03em">' + escapeHtml(pctText) + "</text>";
+
+      var c = s.callout;
+      var underlineX1 = c.align === "middle" ? c.x - 105 : c.align === "end" ? c.x - 210 : c.x;
+      var underlineX2 = c.align === "middle" ? c.x + 105 : c.align === "end" ? c.x : c.x + 210;
+      var calloutSvg =
+        '<polyline points="' + lineStart.x + "," + lineStart.y + " " + c.anchorX + "," + c.anchorY + " " + underlineX1 + "," + c.anchorY + '" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 3"/>' +
+        '<line x1="' + underlineX1 + '" y1="' + c.anchorY + '" x2="' + underlineX2 + '" y2="' + c.anchorY + '" stroke="' + escapeHtml(s.asset.color) + '" stroke-width="2.2" stroke-dasharray="5 3"/>' +
+        '<circle cx="' + lineStart.x + '" cy="' + lineStart.y + '" r="3.2" fill="#ffffff" stroke="#0d1713" stroke-width="1.2"/>' +
+        '<text x="' + c.x + '" y="' + c.y + '" text-anchor="' + c.align + '" fill="var(--ink)" font-size="14" font-weight="800">' +
+          escapeHtml(s.asset.name) + " · $" + Number(s.asset.valueTrillions).toFixed(1) + "T" +
+        "</text>" +
+        '<text x="' + c.x + '" y="' + (c.y + 19) + '" text-anchor="' + c.align + '" fill="var(--muted)" font-size="11.5">' +
+          escapeHtml(s.caption) +
+        "</text>" +
+        '<text x="' + c.x + '" y="' + (c.y + 35) + '" text-anchor="' + c.align + '" fill="var(--ink)" font-size="11.5" font-weight="700">' +
+          Number(s.asset.sharePercent).toFixed(2) + "% of $" + Number(payload.totalTrillions).toFixed(1) + "T global total" +
+        "</text>";
+
+      return '<g class="pie3d-slice" tabindex="0" data-slice-name="' + escapeHtml(s.asset.name) + '" aria-label="' + escapeHtml(s.asset.name + ": $" + Number(s.asset.valueTrillions).toFixed(2) + " trillion (" + Number(s.asset.sharePercent).toFixed(2) + "%)") + '">' +
+        walls + topFace + extrudedText + calloutSvg +
+      "</g>";
+    }).join("");
+
+    return defs + shadow + sliceGroups;
+  }
+
   function renderMoneyMarket(moneyMarket) {
     var listEl = document.getElementById("money-market-list");
     var updatedEl = document.getElementById("money-market-updated");
@@ -357,7 +552,7 @@
       : buildMoneyMarketPayload(MONEY_MARKET_BASELINES.cryptoFallback, Date.now());
 
     listEl.innerHTML = payload.assets.map(function (item) {
-      return '<li class="money-item">' +
+      return '<li class="money-item" data-asset-name="' + escapeHtml(item.name) + '">' +
         '<div class="money-label"><span class="swatch" style="background:' + escapeHtml(item.color) + '"></span>' + escapeHtml(item.name) + "</div>" +
         '<div class="money-metrics">' +
           '<div class="money-val">$' + Number(item.valueTrillions).toFixed(2) + "T</div>" +
@@ -368,50 +563,27 @@
 
     updatedEl.textContent = "Total $" + Number(payload.totalTrillions).toFixed(2) + "T";
 
-    var canvas = document.getElementById("money-market-chart");
-    if (!canvas || typeof root.Chart === "undefined") return;
-    var labels = payload.assets.map(function (a) { return a.name; });
-    var values = payload.assets.map(function (a) { return a.valueTrillions; });
-    var colors = payload.assets.map(function (a) { return a.color; });
+    var svg = document.getElementById("money-market-chart");
+    if (!svg) return;
+    svg.innerHTML = build3dPieSvg(payload);
 
-    if (moneyMarketChart) {
-      moneyMarketChart.data.labels = labels;
-      moneyMarketChart.data.datasets[0].data = values;
-      moneyMarketChart.data.datasets[0].backgroundColor = colors;
-      moneyMarketChart.update();
-      return;
-    }
-
-    moneyMarketChart = new root.Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels: labels,
-        datasets: [{
-          data: values,
-          backgroundColor: colors,
-          borderWidth: 2,
-          borderColor: "transparent",
-          hoverOffset: 6
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        cutout: "62%",
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: function (context) {
-                var asset = payload.assets[context.dataIndex];
-                if (!asset) return "";
-                return " $" + Number(asset.valueTrillions).toFixed(2) + "T (" + Number(asset.sharePercent).toFixed(2) + "%)";
-              }
-            }
-          }
-        }
+    var sliceEls = svg.querySelectorAll(".pie3d-slice");
+    var itemEls = listEl.querySelectorAll(".money-item");
+    function setHighlight(name) {
+      for (var i = 0; i < itemEls.length; i++) {
+        var match = name && itemEls[i].getAttribute("data-asset-name") === name;
+        itemEls[i].classList.toggle("is-active", !!match);
       }
-    });
+    }
+    for (var j = 0; j < sliceEls.length; j++) {
+      (function (el) {
+        var name = el.getAttribute("data-slice-name");
+        el.addEventListener("mouseenter", function () { setHighlight(name); });
+        el.addEventListener("mouseleave", function () { setHighlight(null); });
+        el.addEventListener("focus", function () { setHighlight(name); });
+        el.addEventListener("blur", function () { setHighlight(null); });
+      })(sliceEls[j]);
+    }
   }
 
   function readCache() {
@@ -599,6 +771,7 @@
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
+      build3dPieSvg: build3dPieSvg,
       buildMoneyMarketPayload: buildMoneyMarketPayload,
       calculateIndicators: calculateIndicators,
       parseMoneywebGraph: parseMoneywebGraph,

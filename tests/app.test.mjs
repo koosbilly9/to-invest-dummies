@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  build3dPieSvg,
   buildMoneyMarketPayload,
   calculateIndicators,
   parseMoneywebGraph,
@@ -95,4 +96,11 @@ test("builds money market breakdown with live or fallback crypto market cap", ()
     sharePercent: 1.51,
     color: "#10b981",
   });
+
+  const svg = build3dPieSvg(payload);
+  assert.match(svg, /78\.2%/);
+  assert.match(svg, /18\.5%/);
+  assert.match(svg, /1\.73%/);
+  assert.match(svg, /1\.51%/);
+  assert.match(svg, /Global Fiat \(M2\) · \$103\.9T/);
 });
