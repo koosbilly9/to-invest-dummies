@@ -13,17 +13,11 @@ A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100
 
 The Coronation Top 20 unit trust is not a listed index. This project has no verified public daily NAV/history feed for it, so the row is present but its values are explicitly unavailable. Do not treat it as the FTSE/JSE Top 20 or Top 40 index.
 
-## Deploy
+## Deploy and refresh
 
-The front end is static and can be hosted on GitHub Pages. Deploy the proxy from this directory with Wrangler 4.36.0 or later:
+The front end is static and can be hosted on GitHub Pages. It reuses the existing `crypto-proxy` Worker from `../to-crypto-buy-sell-signals`; the Worker now also needs its `/global` and `/history` routes. To publish those changes, run `npx wrangler deploy` from that sibling project, then reload the page or press **Refresh data**. The existing `CMC_RATE_LIMITER` binding and optional `CMC_KEY` secret are reused.
 
-1. Choose a positive, unique rate-limit `namespace_id` in `wrangler.toml`.
-2. Add the deployed website origin to `ALLOWED_ORIGINS` in `cloudflare/worker.js`.
-3. Set `WORKER` in `app.js` to the deployed Worker URL.
-4. Run `npx wrangler deploy`.
-5. Optionally add a CoinMarketCap key with `npx wrangler secret put CMC_KEY`; without it, the Worker uses public CoinMarketCap endpoints.
-
-The Worker rate limiter is per Cloudflare location and is approximate, not a global quota. Market data is cached by the upstream cache and in the visitor's browser. The browser cache lasts one hour.
+The Worker permits the GitHub Pages origin and the opaque `null` origin used by local `file://` previews. It only returns public market data, and requests remain rate-limited; `null` is not an authentication mechanism. Market data is cached upstream and in each browser for one hour.
 
 ## Tests
 

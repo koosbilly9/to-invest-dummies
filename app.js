@@ -2,10 +2,10 @@
   "use strict";
 
   var DAY = 86400000;
-  var WORKER = "https://invest-dummies-data.koosbilly9.workers.dev";
+  var WORKER = "https://crypto-proxy.koosbilly9.workers.dev";
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
-  var CACHE_KEY = "invest-dummies-market-v1";
+  var CACHE_KEY = "invest-dummies-market-v2";
   var CACHE_MS = 60 * 60 * 1000;
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD" },
@@ -110,7 +110,15 @@
   }
 
   function workerJson(path) {
-    return requestJson(WORKER + path);
+    return requestJson(WORKER + path).catch(function (error) {
+      if (error.message === "HTTP 404" && path !== "/listings") {
+        throw new Error("Shared Worker needs its /global and /history routes deployed");
+      }
+      if (error.name === "TypeError" || error.message === "Failed to fetch" || error.message === "Load failed") {
+        throw new Error("Could not reach the shared crypto-proxy Worker; deploy its updates and refresh");
+      }
+      throw error;
+    });
   }
 
   function cryptoHistory(symbol) {
@@ -285,7 +293,19 @@
     ]).then(function () {
       data.CORONATION = { error: "No verified public NAV history feed" };
       render(data, Date.now());
-      saveCache(data);
+      var cacheable = ASSETS.filter(function (asset) {
+        return asset.type !== "fund";
+      }).every(function (asset) {
+        var row = data[asset.key];
+        return row && row.indicators &&
+          Number.isFinite(row.indicators.current) &&
+          Number.isFinite(row.indicators.high) &&
+          Number.isFinite(row.indicators.low) &&
+          Number.isFinite(row.indicators.rsi) &&
+          !!row.indicators.cycle &&
+          (asset.type !== "crypto" || Number.isFinite(row.marketShare));
+      });
+      if (cacheable) saveCache(data);
       notice.textContent = errors.length
         ? "Some data could not be loaded: " + errors.join("; ") + "."
         : "Signals use completed daily data. Figures may be delayed.";
