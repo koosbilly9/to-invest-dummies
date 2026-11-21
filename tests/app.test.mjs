@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { calculateIndicators, sentiment } = require("../app.js");
+const { calculateIndicators, percentBelowHigh, sentiment } = require("../app.js");
 
 test("calculates five-year candle extremes and the completed 200-day cycle", () => {
   const points = Array.from({ length: 220 }, (_, index) => [
@@ -16,7 +16,14 @@ test("calculates five-year candle extremes and the completed 200-day cycle", () 
   assert.equal(result.current, 50);
   assert.equal(result.high, 319);
   assert.equal(result.low, 49);
+  assert.equal(result.ma200, 218.155);
   assert.equal(result.cycle, "Bear");
+});
+
+test("calculates percentage below five-year high", () => {
+  assert.equal(percentBelowHigh(80, 100), 20);
+  assert.equal(percentBelowHigh(105, 100), 0);
+  assert.equal(percentBelowHigh(null, 100), null);
 });
 
 test("classifies RSI bands and validates malformed market history", () => {

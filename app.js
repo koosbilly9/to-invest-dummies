@@ -5,7 +5,7 @@
   var WORKER = "https://crypto-proxy.koosbilly9.workers.dev";
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
-  var CACHE_KEY = "invest-dummies-market-v2";
+  var CACHE_KEY = "invest-dummies-market-v3";
   var CACHE_MS = 60 * 60 * 1000;
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD" },
@@ -71,6 +71,7 @@
       current: last,
       high: fiveYear.length ? Math.max.apply(null, fiveYear.map(function (p) { return p.high; })) : null,
       low: fiveYear.length ? Math.min.apply(null, fiveYear.map(function (p) { return p.low; })) : null,
+      ma200: average,
       rsi: rsi,
       cycle: average === null ? null : last >= average ? "Bull" : "Bear"
     };
@@ -112,7 +113,7 @@
   function workerJson(path) {
     return requestJson(WORKER + path).catch(function (error) {
       if (error.message === "HTTP 404" && path !== "/listings") {
-        throw new Error("Shared Worker needs its /global and /history routes deployed");
+        throw new Error("Shared Worker needs its /history route deployed");
       }
       if (error.name === "TypeError" || error.message === "Failed to fetch" || error.message === "Load failed") {
         throw new Error("Could not reach the shared crypto-proxy Worker; deploy its updates and refresh");
@@ -191,6 +192,12 @@
     return Number.isFinite(value) ? value.toFixed(2) + "%" : "—";
   }
 
+  function percentBelowHigh(current, high) {
+    return Number.isFinite(current) && Number.isFinite(high) && high > 0
+      ? Math.max(0, (high - current) / high * 100)
+      : null;
+  }
+
   function render(data, timestamp) {
     var rows = ASSETS.map(function (asset) {
       var result = data[asset.key] || {};
@@ -200,9 +207,7 @@
       var fear = asset.type === "crypto" && data.fearGreed
         ? '<span class="value">' + data.fearGreed.value + '</span><div class="asset-sub">' + escapeHtml(data.fearGreed.label) + "</div>"
         : "—";
-      var share = asset.type === "crypto" && Number.isFinite(result.marketShare)
-        ? displayPercent(result.marketShare)
-        : "—";
+      var indicators = result.indicators || {};
       var status = result.error
         ? '<div class="asset-sub">' + escapeHtml(result.error) + "</div>"
         : "";
@@ -212,8 +217,9 @@
         '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
         '<td class="value">' + formatPrice(result.indicators && result.indicators.low, asset.currency) + "</td>" +
         '<td><span class="sentiment ' + signal.cls + '">' + signal.text + "</span></td>" +
-        '<td class="value">' + formatPrice(result.indicators && result.indicators.current, asset.currency) + "</td>" +
-        '<td class="value">' + share + "</td>" +
+        '<td class="value">' + formatPrice(indicators.current, asset.currency) + "</td>" +
+        '<td class="value">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
+        '<td class="value">' + displayPercent(percentBelowHigh(indicators.current, indicators.high)) + "</td>" +
         '<td class="' + cycleClass + '">' + (cycle || "—") + "</td>" +
         "</tr>";
     });
@@ -246,32 +252,23 @@
         response.data.forEach(function (coin) {
           lookup[String(coin.symbol).toUpperCase()] = coin;
         });
-        return workerJson("/global").catch(function (error) {
-          errors.push("Global market cap: " + error.message);
-          return null;
-        }).then(function (global) {
-          var total = number(global && global.data && global.data.quote && global.data.quote.USD && global.data.quote.USD.total_market_cap);
-          return Promise.all(ASSETS.filter(function (asset) { return asset.type === "crypto"; }).map(function (asset) {
-            var item = lookup[asset.key];
-            var quote = item && item.quote && !Array.isArray(item.quote)
-              ? item.quote.USD
-              : item && Array.isArray(item.quote)
-                ? item.quote.filter(function (value) { return value && value.symbol === "USD"; })[0]
-                : null;
-            if (!quote) throw new Error("CoinMarketCap has no USD listing for " + asset.key);
-            return cryptoHistory(asset.symbol).then(function (history) {
-              var indicators = calculateIndicators(history);
-              indicators.current = number(quote.price);
-              data[asset.key] = {
-                marketShare: Number.isFinite(total) && total > 0 ? number(quote.market_cap) / total * 100 : null,
-                indicators: indicators
-              };
-            }).catch(function (error) {
-              data[asset.key] = { error: "History unavailable", indicators: { current: number(quote.price) } };
-              errors.push(asset.key + " history: " + error.message);
-            });
-          }));
-        });
+        return Promise.all(ASSETS.filter(function (asset) { return asset.type === "crypto"; }).map(function (asset) {
+          var item = lookup[asset.key];
+          var quote = item && item.quote && !Array.isArray(item.quote)
+            ? item.quote.USD
+            : item && Array.isArray(item.quote)
+              ? item.quote.filter(function (value) { return value && value.symbol === "USD"; })[0]
+              : null;
+          if (!quote) throw new Error("CoinMarketCap has no USD listing for " + asset.key);
+          return cryptoHistory(asset.symbol).then(function (history) {
+            var indicators = calculateIndicators(history);
+            indicators.current = number(quote.price);
+            data[asset.key] = { indicators: indicators };
+          }).catch(function (error) {
+            data[asset.key] = { error: "History unavailable", indicators: { current: number(quote.price) } };
+            errors.push(asset.key + " history: " + error.message);
+          });
+        }));
       }).catch(function (error) {
         errors.push("Crypto feed: " + error.message);
         ["BTC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
@@ -301,9 +298,9 @@
           Number.isFinite(row.indicators.current) &&
           Number.isFinite(row.indicators.high) &&
           Number.isFinite(row.indicators.low) &&
+          Number.isFinite(row.indicators.ma200) &&
           Number.isFinite(row.indicators.rsi) &&
-          !!row.indicators.cycle &&
-          (asset.type !== "crypto" || Number.isFinite(row.marketShare));
+          !!row.indicators.cycle;
       });
       if (cacheable) saveCache(data);
       notice.textContent = errors.length
@@ -318,7 +315,11 @@
   }
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { calculateIndicators: calculateIndicators, sentiment: sentiment };
+    module.exports = {
+      calculateIndicators: calculateIndicators,
+      percentBelowHigh: percentBelowHigh,
+      sentiment: sentiment
+    };
   }
   if (typeof document !== "undefined") {
     document.getElementById("refresh").addEventListener("click", function () {
