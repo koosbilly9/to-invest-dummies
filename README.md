@@ -6,12 +6,11 @@ A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100
 
 - Crypto prices: CoinMarketCap. Crypto history: Binance daily candles.
 - Index history: Yahoo Finance (`^GSPC` and `^NDX` chart API and history page fallback) and Stooq (`^spx` and `^ndx` free daily CSV feed).
+- Coronation Top 20 history: Moneyweb / ProfileData five-year daily unit trust NAV feed (`CNTF`, converted from South African cents per unit to `ZAR`).
 - Fear/greed: Alternative.me's crypto index, shown for crypto only.
 - Oversold/overbought: RSI(14), under 30/over 70. Bull/bear: latest completed close above/below its 200-day simple moving average.
 - Five-year high/low: highest daily candle high and lowest daily candle low over the available five-year history.
 - MA200: the latest completed close's 200-day simple moving average. % below: the percentage current price is below the available five-year high.
-
-The Coronation Top 20 unit trust is not a listed index. This project has no verified public daily NAV/history feed for it, so the row is present but its values are explicitly unavailable. Do not treat it as the FTSE/JSE Top 20 or Top 40 index.
 
 ## Deploy and refresh
 

@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   calculateIndicators,
+  parseMoneywebGraph,
   parseStooqCsv,
   parseYahooChart,
   percentClass,
@@ -70,4 +71,9 @@ test("parses Stooq CSV and Yahoo chart JSON history", () => {
     },
   });
   assert.deepEqual(yahooPoints, [[Date.UTC(2026, 10, 19), 5920, 5950, 5880]]);
+
+  const mwPoints = parseMoneywebGraph({
+    CNTF: [{ id: "CNTF", dt: "2026-11-19T00:00:00", c: "24711.00" }],
+  }, "CNTF");
+  assert.deepEqual(mwPoints, [[Date.UTC(2026, 10, 19), 247.11, 247.11, 247.11]]);
 });

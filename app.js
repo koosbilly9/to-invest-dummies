@@ -5,7 +5,7 @@
   var WORKER = "https://crypto-proxy.koosbilly9.workers.dev";
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
-  var CACHE_KEY = "invest-dummies-market-v3";
+  var CACHE_KEY = "invest-dummies-market-v4";
   var CACHE_MS = 60 * 60 * 1000;
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
@@ -13,7 +13,7 @@
     { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD", url: "https://solana.com", slug: "solana" },
     { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", yahooSymbol: "^GSPC", stooqSymbol: "^spx", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
     { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", yahooSymbol: "^NDX", stooqSymbol: "^ndx", currency: "USD", url: "https://www.nasdaq.com/solutions/nasdaq-100", quoteUrl: "https://finance.yahoo.com/quote/%5ENDX/" },
-    { key: "CORONATION", name: "Coronation Top 20", type: "fund", currency: "ZAR" }
+    { key: "CORONATION", name: "Coronation Top 20", type: "fund", ticker: "coronation", moneywebCode: "CNTF", currency: "ZAR", url: "https://www.coronation.com/en-za/personal/funds/top-20/", quoteUrl: "https://www.moneyweb.co.za/tools-and-data/click-a-unit-trust/CNTF/" }
   ];
 
   function number(value) {
@@ -189,29 +189,52 @@
     return points;
   }
 
+  function parseMoneywebGraph(payload, code) {
+    var key = code || "CNTF";
+    var rows = payload && Array.isArray(payload[key]) ? payload[key] : null;
+    if (!rows || !rows.length) throw new Error("Invalid Moneyweb response");
+    var raw = [];
+    for (var i = 0; i < rows.length; i++) {
+      var item = rows[i];
+      if (!item || typeof item.dt !== "string") continue;
+      var match = /^(\d{4})-(\d{2})-(\d{2})/.exec(item.dt.trim());
+      if (!match) continue;
+      var time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      var cents = item.c != null ? number(item.c) : NaN;
+      var rands = item.i != null ? number(item.i) : NaN;
+      var val = Number.isFinite(cents) && cents > 0 ? cents / 100 : rands;
+      raw.push([time, val, val, val]);
+    }
+    var points = normalizeHistoryPoints(raw);
+    if (!points.length) throw new Error("Empty Moneyweb history");
+    return points;
+  }
+
   function indexHistory(asset) {
-    var yahooUrl = "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(asset.yahooSymbol) + "?range=5y&interval=1d";
-    var stooqUrl = "https://stooq.com/q/d/l/?s=" + encodeURIComponent(asset.stooqSymbol) + "&i=d";
+    var yahooUrl = asset.yahooSymbol
+      ? "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(asset.yahooSymbol) + "?range=5y&interval=1d"
+      : null;
+    var stooqUrl = asset.stooqSymbol
+      ? "https://stooq.com/q/d/l/?s=" + encodeURIComponent(asset.stooqSymbol) + "&i=d"
+      : null;
     var attempts = [
       function () {
         return workerJson("/history?asset=" + encodeURIComponent(asset.ticker)).then(function (response) {
           if (!response || !Array.isArray(response.points)) throw new Error("Invalid history response");
           return response.points;
         });
-      },
-      function () {
-        return requestJson("https://api.allorigins.win/raw?url=" + encodeURIComponent(yahooUrl)).then(parseYahooChart);
-      },
-      function () {
-        return requestText("https://api.allorigins.win/raw?url=" + encodeURIComponent(stooqUrl)).then(parseStooqCsv);
-      },
-      function () {
-        return requestJson("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(yahooUrl)).then(parseYahooChart);
-      },
-      function () {
-        return requestText("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(stooqUrl)).then(parseStooqCsv);
       }
     ];
+    if (yahooUrl) {
+      attempts.push(function () {
+        return requestJson("https://api.allorigins.win/raw?url=" + encodeURIComponent(yahooUrl)).then(parseYahooChart);
+      });
+    }
+    if (stooqUrl) {
+      attempts.push(function () {
+        return requestText("https://api.allorigins.win/raw?url=" + encodeURIComponent(stooqUrl)).then(parseStooqCsv);
+      });
+    }
     var index = 0;
     function next(lastError) {
       if (index >= attempts.length) return Promise.reject(lastError || new Error("History unavailable"));
@@ -225,7 +248,7 @@
 
   function workerJson(path) {
     return requestJson(WORKER + path).catch(function (error) {
-      if (error.message === "HTTP 404" && path !== "/listings") {
+      if ((error.message === "HTTP 404" || error.message === "HTTP 400") && path !== "/listings") {
         throw new Error("Shared Worker needs its /history route deployed");
       }
       if (error.name === "TypeError" || error.message === "Failed to fetch" || error.message === "Load failed") {
@@ -413,7 +436,7 @@
         errors.push("Crypto feed: " + error.message);
         ["BTC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
       }),
-      Promise.all(ASSETS.filter(function (asset) { return asset.type === "index"; }).map(function (asset) {
+      Promise.all(ASSETS.filter(function (asset) { return asset.type === "index" || asset.type === "fund"; }).map(function (asset) {
         return indexHistory(asset).then(function (points) {
           data[asset.key] = { indicators: calculateIndicators(points) };
         }).catch(function (error) {
@@ -427,7 +450,6 @@
         errors.push("Fear/greed: " + error.message);
       })
     ]).then(function () {
-      data.CORONATION = { error: "No verified public NAV history feed" };
       render(data, Date.now());
       var cacheable = ASSETS.filter(function (asset) {
         return asset.type !== "fund";
@@ -456,6 +478,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       calculateIndicators: calculateIndicators,
+      parseMoneywebGraph: parseMoneywebGraph,
       parseStooqCsv: parseStooqCsv,
       parseYahooChart: parseYahooChart,
       percentClass: percentClass,
