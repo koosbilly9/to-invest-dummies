@@ -1,0 +1,310 @@
+(function (root) {
+  "use strict";
+
+  var DAY = 86400000;
+  var WORKER = "https://invest-dummies-data.koosbilly9.workers.dev";
+  var BINANCE = "https://data-api.binance.vision/api/v3/klines";
+  var FNG = "https://api.alternative.me/fng/";
+  var CACHE_KEY = "invest-dummies-market-v1";
+  var CACHE_MS = 60 * 60 * 1000;
+  var ASSETS = [
+    { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD" },
+    { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD" },
+    { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD" },
+    { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", currency: "USD" },
+    { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", currency: "USD" },
+    { key: "CORONATION", name: "Coronation Top 20", type: "fund", currency: "ZAR" }
+  ];
+
+  function number(value) {
+    if (typeof value !== "number" && !(typeof value === "string" && value.trim())) return NaN;
+    return Number(value);
+  }
+
+  function calculateIndicators(points) {
+    if (!Array.isArray(points)) throw new Error("Price history is not an array");
+    var valid = [];
+    var previous = 0;
+    points.forEach(function (point) {
+      if (!Array.isArray(point) || point.length < 2) throw new Error("Invalid price history point");
+      var time = number(point[0]);
+      var close = number(point[1]);
+      var high = point.length > 2 && point[2] != null ? number(point[2]) : close;
+      var low = point.length > 3 && point[3] != null ? number(point[3]) : close;
+      if (!Number.isSafeInteger(time) || time <= previous ||
+          !Number.isFinite(close) || close <= 0 ||
+          !Number.isFinite(high) || !Number.isFinite(low) ||
+          high < close || low > close || high < low || low <= 0) {
+        throw new Error("Invalid price history values");
+      }
+      valid.push({ time: time, close: close, high: high, low: low });
+      previous = time;
+    });
+    if (!valid.length) throw new Error("Price history is empty");
+
+    var cutoff = Date.now() - 5 * 365.25 * DAY;
+    var fiveYear = valid.filter(function (point) { return point.time >= cutoff; });
+    var closes = valid.map(function (point) { return point.close; });
+    var last = closes[closes.length - 1];
+    var average = closes.length >= 200
+      ? closes.slice(-200).reduce(function (sum, close) { return sum + close; }, 0) / 200
+      : null;
+    var rsi = null;
+    if (closes.length > 14) {
+      var gains = 0;
+      var losses = 0;
+      for (var i = 1; i <= 14; i++) {
+        var initial = closes[i] - closes[i - 1];
+        if (initial > 0) gains += initial;
+        else losses -= initial;
+      }
+      gains /= 14;
+      losses /= 14;
+      for (var j = 15; j < closes.length; j++) {
+        var change = closes[j] - closes[j - 1];
+        gains = (gains * 13 + Math.max(change, 0)) / 14;
+        losses = (losses * 13 + Math.max(-change, 0)) / 14;
+      }
+      rsi = losses === 0 ? 100 : 100 - 100 / (1 + gains / losses);
+    }
+    return {
+      current: last,
+      high: fiveYear.length ? Math.max.apply(null, fiveYear.map(function (p) { return p.high; })) : null,
+      low: fiveYear.length ? Math.min.apply(null, fiveYear.map(function (p) { return p.low; })) : null,
+      rsi: rsi,
+      cycle: average === null ? null : last >= average ? "Bull" : "Bear"
+    };
+  }
+
+  function formatPrice(value, currency) {
+    if (!Number.isFinite(value)) return "—";
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency,
+        maximumFractionDigits: value >= 1000 ? 0 : value >= 1 ? 2 : 5
+      }).format(value);
+    } catch (error) {
+      return currency + " " + value.toLocaleString();
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char];
+    });
+  }
+
+  function requestJson(url) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    return fetch(url, { signal: controller.signal }).then(function (response) {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      return response.json();
+    }).catch(function (error) {
+      if (error.name === "AbortError") throw new Error("Request timed out");
+      throw error;
+    }).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function workerJson(path) {
+    return requestJson(WORKER + path);
+  }
+
+  function cryptoHistory(symbol) {
+    var start = Date.now() - 5 * 365.25 * DAY;
+    var url = BINANCE + "?symbol=" + encodeURIComponent(symbol) + "&interval=1d&startTime=" + Math.floor(start) + "&limit=1000";
+    return requestJson(url).then(function (first) {
+      if (!Array.isArray(first)) throw new Error("Binance returned invalid candles");
+      var candles = first;
+      if (first.length === 1000) {
+        var next = number(first[first.length - 1][0]) + DAY;
+        return requestJson(BINANCE + "?symbol=" + encodeURIComponent(symbol) + "&interval=1d&startTime=" + next + "&limit=1000")
+          .then(function (second) {
+            if (!Array.isArray(second)) throw new Error("Binance returned invalid candles");
+            candles = candles.concat(second);
+            return candlePoints(candles);
+          });
+      }
+      return candlePoints(candles);
+    });
+  }
+
+  function candlePoints(candles) {
+    var today = new Date();
+    var currentUtcDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    return candles.filter(function (candle) {
+      return Array.isArray(candle) && number(candle[0]) < currentUtcDay;
+    }).map(function (candle) {
+      return [number(candle[0]), number(candle[4]), number(candle[2]), number(candle[3])];
+    });
+  }
+
+  function getFearGreed() {
+    return requestJson(FNG).then(function (response) {
+      var item = response && Array.isArray(response.data) && response.data[0];
+      var value = item && Number(item.value);
+      if (!Number.isInteger(value) || value < 0 || value > 100) throw new Error("Invalid fear/greed response");
+      return { value: value, label: item.value_classification || "Crypto sentiment" };
+    });
+  }
+
+  function readCache() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(CACHE_KEY));
+      return saved && Number.isFinite(saved.time) && saved.data &&
+        Date.now() >= saved.time && Date.now() - saved.time < CACHE_MS
+        ? saved
+        : null;
+    } catch (error) {
+      console.warn("Could not read saved market data:", error);
+      return null;
+    }
+  }
+
+  function saveCache(data) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: data }));
+    } catch (error) {
+      console.warn("Could not save market data:", error);
+    }
+  }
+
+  function sentiment(indicator) {
+    if (!Number.isFinite(indicator)) return { text: "n/a", cls: "pill-neutral" };
+    if (indicator < 30) return { text: "Oversold", cls: "pill-positive" };
+    if (indicator > 70) return { text: "Overbought", cls: "pill-negative" };
+    return { text: "Neutral", cls: "pill-neutral" };
+  }
+
+  function displayPercent(value) {
+    return Number.isFinite(value) ? value.toFixed(2) + "%" : "—";
+  }
+
+  function render(data, timestamp) {
+    var rows = ASSETS.map(function (asset) {
+      var result = data[asset.key] || {};
+      var signal = sentiment(result.indicators ? result.indicators.rsi : null);
+      var cycle = result.indicators && result.indicators.cycle;
+      var cycleClass = cycle === "Bull" ? "positive" : cycle === "Bear" ? "negative" : "";
+      var fear = asset.type === "crypto" && data.fearGreed
+        ? '<span class="value">' + data.fearGreed.value + '</span><div class="asset-sub">' + escapeHtml(data.fearGreed.label) + "</div>"
+        : "—";
+      var share = asset.type === "crypto" && Number.isFinite(result.marketShare)
+        ? displayPercent(result.marketShare)
+        : "—";
+      var status = result.error
+        ? '<div class="asset-sub">' + escapeHtml(result.error) + "</div>"
+        : "";
+      return "<tr>" +
+        '<td><div class="asset"><span class="coin-icon">' + escapeHtml(asset.key === "NASDAQ100" ? "N100" : asset.key === "CORONATION" ? "C20" : asset.key === "SP500" ? "S&P" : asset.key) + '</span><div><div class="asset-name">' + escapeHtml(asset.name) + '</div><div class="asset-sub">' + escapeHtml(asset.key) + status + "</div></div></div></td>" +
+        "<td>" + fear + "</td>" +
+        '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
+        '<td class="value">' + formatPrice(result.indicators && result.indicators.low, asset.currency) + "</td>" +
+        '<td><span class="sentiment ' + signal.cls + '">' + signal.text + "</span></td>" +
+        '<td class="value">' + formatPrice(result.indicators && result.indicators.current, asset.currency) + "</td>" +
+        '<td class="value">' + share + "</td>" +
+        '<td class="' + cycleClass + '">' + (cycle || "—") + "</td>" +
+        "</tr>";
+    });
+    document.getElementById("assets").innerHTML = rows.join("");
+    document.getElementById("updated").textContent = timestamp
+      ? "Updated " + new Date(timestamp).toLocaleString()
+      : "Some feeds may be unavailable";
+  }
+
+  function load() {
+    var button = document.getElementById("refresh");
+    var notice = document.getElementById("notice");
+    button.disabled = true;
+    notice.textContent = "Fetching current prices and history…";
+
+    var cached = readCache();
+    if (cached && !root.forceRefresh) {
+      render(cached.data, cached.time);
+      notice.textContent = "Showing a saved snapshot from this browser. Refresh is available once the snapshot expires.";
+      button.disabled = false;
+      return Promise.resolve();
+    }
+
+    var data = {};
+    var errors = [];
+    return Promise.all([
+      workerJson("/listings").then(function (response) {
+        if (!response || !Array.isArray(response.data)) throw new Error("CoinMarketCap listings were invalid");
+        var lookup = {};
+        response.data.forEach(function (coin) {
+          lookup[String(coin.symbol).toUpperCase()] = coin;
+        });
+        return workerJson("/global").catch(function (error) {
+          errors.push("Global market cap: " + error.message);
+          return null;
+        }).then(function (global) {
+          var total = number(global && global.data && global.data.quote && global.data.quote.USD && global.data.quote.USD.total_market_cap);
+          return Promise.all(ASSETS.filter(function (asset) { return asset.type === "crypto"; }).map(function (asset) {
+            var item = lookup[asset.key];
+            var quote = item && item.quote && !Array.isArray(item.quote)
+              ? item.quote.USD
+              : item && Array.isArray(item.quote)
+                ? item.quote.filter(function (value) { return value && value.symbol === "USD"; })[0]
+                : null;
+            if (!quote) throw new Error("CoinMarketCap has no USD listing for " + asset.key);
+            return cryptoHistory(asset.symbol).then(function (history) {
+              var indicators = calculateIndicators(history);
+              indicators.current = number(quote.price);
+              data[asset.key] = {
+                marketShare: Number.isFinite(total) && total > 0 ? number(quote.market_cap) / total * 100 : null,
+                indicators: indicators
+              };
+            }).catch(function (error) {
+              data[asset.key] = { error: "History unavailable", indicators: { current: number(quote.price) } };
+              errors.push(asset.key + " history: " + error.message);
+            });
+          }));
+        });
+      }).catch(function (error) {
+        errors.push("Crypto feed: " + error.message);
+        ["BTC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
+      }),
+      Promise.all(ASSETS.filter(function (asset) { return asset.type === "index"; }).map(function (asset) {
+        return workerJson("/history?asset=" + encodeURIComponent(asset.ticker)).then(function (response) {
+          if (!response || !Array.isArray(response.points)) throw new Error("Invalid history response");
+          data[asset.key] = { indicators: calculateIndicators(response.points) };
+        }).catch(function (error) {
+          data[asset.key] = { error: "History unavailable" };
+          errors.push(asset.name + ": " + error.message);
+        });
+      })),
+      getFearGreed().then(function (value) {
+        data.fearGreed = value;
+      }).catch(function (error) {
+        errors.push("Fear/greed: " + error.message);
+      })
+    ]).then(function () {
+      data.CORONATION = { error: "No verified public NAV history feed" };
+      render(data, Date.now());
+      saveCache(data);
+      notice.textContent = errors.length
+        ? "Some data could not be loaded: " + errors.join("; ") + "."
+        : "Signals use completed daily data. Figures may be delayed.";
+    }).catch(function (error) {
+      notice.textContent = "Could not load market data: " + error.message;
+      console.error("Market data request failed:", error);
+    }).finally(function () {
+      button.disabled = false;
+    });
+  }
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { calculateIndicators: calculateIndicators, sentiment: sentiment };
+  }
+  if (typeof document !== "undefined") {
+    document.getElementById("refresh").addEventListener("click", function () {
+      root.forceRefresh = true;
+      load().finally(function () { root.forceRefresh = false; });
+    });
+    load();
+  }
+})(typeof window !== "undefined" ? window : globalThis);
