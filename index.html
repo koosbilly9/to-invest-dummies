@@ -107,9 +107,61 @@
     .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
     .dot.red { background: var(--red); }
     .dot.orange { background: var(--orange); }
+    .board + .board { margin-top: 24px; }
+    .money-grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 340px) 1fr;
+      align-items: center;
+      gap: 28px;
+      padding: 8px 22px 24px;
+      border-top: 1px solid var(--line);
+    }
+    .chart-box {
+      position: relative;
+      width: 100%;
+      max-width: 300px;
+      aspect-ratio: 1;
+      margin: 0 auto;
+    }
+    .money-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .money-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--paper);
+    }
+    .money-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      flex: none;
+      border-radius: 4px;
+    }
+    .money-metrics { text-align: right; }
+    .money-val { font-weight: 750; font-variant-numeric: tabular-nums; }
+    .money-share { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     footer { max-width: 90ch; padding: 22px 0 38px; color: var(--muted); font-size: 12px; line-height: 1.7; }
     footer a { color: var(--green); }
     :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+    @media (max-width: 720px) {
+      .money-grid { grid-template-columns: 1fr; padding: 16px 17px 20px; }
+    }
     @media (max-width: 600px) {
       .page { width: min(100% - 24px, 1180px); }
       .hero { padding-top: 40px; }
@@ -171,11 +223,27 @@
           <span>RSI(14): under 30 = oversold, over 70 = overbought</span>
         </div>
       </section>
+      <section class="board" aria-labelledby="money-market-heading">
+        <div class="board-head">
+          <div>
+            <h2 id="money-market-heading">Global money vs. hard assets</h2>
+            <div class="asset-sub">Estimated global market cap in USD trillions (M2 fiat, gold, silver, and all crypto)</div>
+          </div>
+          <div class="updated" id="money-market-updated" role="status">Loading global money breakdown…</div>
+        </div>
+        <div class="money-grid">
+          <div class="chart-box">
+            <canvas id="money-market-chart" aria-label="Global money market cap doughnut chart" role="img"></canvas>
+          </div>
+          <ul class="money-list" id="money-market-list" aria-label="Global money market cap breakdown"></ul>
+        </div>
+      </section>
     </main>
     <footer>
-      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Coronation Top 20 (Class A, JSE code CNTF) five-year daily NAV history is sourced from Moneyweb / ProfileData. Fear/greed is Alternative.me’s crypto index and appears only for crypto. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
+      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Coronation Top 20 (Class A, JSE code CNTF) five-year daily NAV history is sourced from Moneyweb / ProfileData. Global money market cap compares baseline Global Fiat M2 ($103.9T), Gold ($24.6T), and Silver ($2.3T) with live total cryptocurrency market cap from CoinGecko ($2.0T fallback). Fear/greed is Alternative.me’s crypto index and appears only for crypto. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
     </footer>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

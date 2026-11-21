@@ -5,8 +5,16 @@
   var WORKER = "https://to-invest-dummies.koosbilly9.workers.dev";
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
-  var CACHE_KEY = "invest-dummies-market-v4";
+  var COINGECKO_GLOBAL = "https://api.coingecko.com/api/v3/global";
+  var CACHE_KEY = "invest-dummies-market-v5";
   var CACHE_MS = 60 * 60 * 1000;
+  var MONEY_MARKET_BASELINES = {
+    fiat: 103.9,
+    gold: 24.6,
+    silver: 2.3,
+    cryptoFallback: 2.0
+  };
+  var moneyMarketChart = null;
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
     { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
@@ -296,6 +304,116 @@
     });
   }
 
+  function buildMoneyMarketPayload(cryptoTrillions, timestamp) {
+    var crypto = Number.isFinite(cryptoTrillions) && cryptoTrillions > 0
+      ? cryptoTrillions
+      : MONEY_MARKET_BASELINES.cryptoFallback;
+    var raw = [
+      { name: "Global Fiat (M2)", value: MONEY_MARKET_BASELINES.fiat, color: "#2563eb" },
+      { name: "Gold", value: MONEY_MARKET_BASELINES.gold, color: "#eab308" },
+      { name: "Silver", value: MONEY_MARKET_BASELINES.silver, color: "#94a3b8" },
+      { name: "Cryptocurrencies", value: crypto, color: "#10b981" }
+    ];
+    var totalRaw = raw.reduce(function (sum, item) { return sum + item.value; }, 0);
+    return {
+      updatedAt: new Date(timestamp || Date.now()).toISOString(),
+      totalTrillions: Number(totalRaw.toFixed(2)),
+      assets: raw.map(function (item) {
+        return {
+          name: item.name,
+          valueTrillions: Number(item.value.toFixed(2)),
+          sharePercent: Number(((item.value / totalRaw) * 100).toFixed(2)),
+          color: item.color
+        };
+      })
+    };
+  }
+
+  function validateMoneyMarketPayload(payload) {
+    if (!payload || !Array.isArray(payload.assets) || !payload.assets.length || !Number.isFinite(Number(payload.totalTrillions))) {
+      throw new Error("Invalid money market response");
+    }
+    return payload;
+  }
+
+  function getMoneyMarket() {
+    return workerJson("/api/money-market").then(validateMoneyMarketPayload).catch(function () {
+      return requestJson(COINGECKO_GLOBAL).then(function (payload) {
+        var usd = payload && payload.data && payload.data.total_market_cap && number(payload.data.total_market_cap.usd);
+        if (!Number.isFinite(usd) || usd <= 0) throw new Error("Invalid CoinGecko market cap");
+        return buildMoneyMarketPayload(usd / 1e12, Date.now());
+      }).catch(function () {
+        return buildMoneyMarketPayload(MONEY_MARKET_BASELINES.cryptoFallback, Date.now());
+      });
+    });
+  }
+
+  function renderMoneyMarket(moneyMarket) {
+    var listEl = document.getElementById("money-market-list");
+    var updatedEl = document.getElementById("money-market-updated");
+    if (!listEl || !updatedEl) return;
+    var payload = moneyMarket && Array.isArray(moneyMarket.assets)
+      ? moneyMarket
+      : buildMoneyMarketPayload(MONEY_MARKET_BASELINES.cryptoFallback, Date.now());
+
+    listEl.innerHTML = payload.assets.map(function (item) {
+      return '<li class="money-item">' +
+        '<div class="money-label"><span class="swatch" style="background:' + escapeHtml(item.color) + '"></span>' + escapeHtml(item.name) + "</div>" +
+        '<div class="money-metrics">' +
+          '<div class="money-val">$' + Number(item.valueTrillions).toFixed(2) + "T</div>" +
+          '<div class="money-share">' + Number(item.sharePercent).toFixed(2) + "% of total</div>" +
+        "</div>" +
+      "</li>";
+    }).join("");
+
+    updatedEl.textContent = "Total $" + Number(payload.totalTrillions).toFixed(2) + "T";
+
+    var canvas = document.getElementById("money-market-chart");
+    if (!canvas || typeof root.Chart === "undefined") return;
+    var labels = payload.assets.map(function (a) { return a.name; });
+    var values = payload.assets.map(function (a) { return a.valueTrillions; });
+    var colors = payload.assets.map(function (a) { return a.color; });
+
+    if (moneyMarketChart) {
+      moneyMarketChart.data.labels = labels;
+      moneyMarketChart.data.datasets[0].data = values;
+      moneyMarketChart.data.datasets[0].backgroundColor = colors;
+      moneyMarketChart.update();
+      return;
+    }
+
+    moneyMarketChart = new root.Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: "transparent",
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: "62%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                var asset = payload.assets[context.dataIndex];
+                if (!asset) return "";
+                return " $" + Number(asset.valueTrillions).toFixed(2) + "T (" + Number(asset.sharePercent).toFixed(2) + "%)";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   function readCache() {
     try {
       var saved = JSON.parse(localStorage.getItem(CACHE_KEY));
@@ -384,6 +502,7 @@
     document.getElementById("updated").textContent = timestamp
       ? "Updated " + new Date(timestamp).toLocaleString()
       : "Some feeds may be unavailable";
+    renderMoneyMarket(data.moneyMarket);
   }
 
   function load() {
@@ -448,6 +567,9 @@
         data.fearGreed = value;
       }).catch(function (error) {
         errors.push("Fear/greed: " + error.message);
+      }),
+      getMoneyMarket().then(function (value) {
+        data.moneyMarket = value;
       })
     ]).then(function () {
       render(data, Date.now());
@@ -477,6 +599,7 @@
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
+      buildMoneyMarketPayload: buildMoneyMarketPayload,
       calculateIndicators: calculateIndicators,
       parseMoneywebGraph: parseMoneywebGraph,
       parseStooqCsv: parseStooqCsv,

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  buildMoneyMarketPayload,
   calculateIndicators,
   parseMoneywebGraph,
   parseStooqCsv,
@@ -76,4 +77,22 @@ test("parses Stooq CSV and Yahoo chart JSON history", () => {
     CNTF: [{ id: "CNTF", dt: "2026-11-19T00:00:00", c: "24711.00" }],
   }, "CNTF");
   assert.deepEqual(mwPoints, [[Date.UTC(2026, 10, 19), 247.11, 247.11, 247.11]]);
+});
+
+test("builds money market breakdown with live or fallback crypto market cap", () => {
+  const payload = buildMoneyMarketPayload(2.0, Date.UTC(2026, 10, 21));
+  assert.equal(payload.totalTrillions, 132.8);
+  assert.equal(payload.assets.length, 4);
+  assert.deepEqual(payload.assets[0], {
+    name: "Global Fiat (M2)",
+    valueTrillions: 103.9,
+    sharePercent: 78.24,
+    color: "#2563eb",
+  });
+  assert.deepEqual(payload.assets[3], {
+    name: "Cryptocurrencies",
+    valueTrillions: 2.0,
+    sharePercent: 1.51,
+    color: "#10b981",
+  });
 });

@@ -28,6 +28,13 @@ const MONEYWEB_FUNDS = {
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const FIVE_YEARS_MS = 5 * 365.25 * 86400000;
+const COINGECKO_GLOBAL_URL = "https://api.coingecko.com/api/v3/global";
+const MONEY_MARKET_DEFAULTS = {
+  fiatTrillions: 103.9,
+  goldTrillions: 24.6,
+  silverTrillions: 2.3,
+  cryptoFallbackTrillions: 2.0,
+};
 const UPSTREAM_CACHE = {
   cacheEverything: true,
   cacheTtlByStatus: {
@@ -289,18 +296,123 @@ async function proxyHistory(asset, cors) {
   );
 }
 
-export default {
-  async fetch(request, env) {
-    const origin = request.headers.get("Origin") || "";
-    const cors = origin && ALLOWED_ORIGINS.includes(origin)
-      ? {
-          "Access-Control-Allow-Origin": origin,
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Vary": "Origin",
-        }
-      : { "Vary": "Origin" };
+function positiveBaseline(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
 
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+export function buildMoneyMarketData(cryptoTrillions, env = {}, now = new Date()) {
+  const fiat = positiveBaseline(env.FIAT_M2_TRILLIONS, MONEY_MARKET_DEFAULTS.fiatTrillions);
+  const gold = positiveBaseline(env.GOLD_TRILLIONS, MONEY_MARKET_DEFAULTS.goldTrillions);
+  const silver = positiveBaseline(env.SILVER_TRILLIONS, MONEY_MARKET_DEFAULTS.silverTrillions);
+  const cryptoFallback = positiveBaseline(
+    env.CRYPTO_FALLBACK_TRILLIONS,
+    MONEY_MARKET_DEFAULTS.cryptoFallbackTrillions,
+  );
+  const crypto = Number.isFinite(cryptoTrillions) && cryptoTrillions > 0 ? cryptoTrillions : cryptoFallback;
+
+  const rawAssets = [
+    { name: "Global Fiat (M2)", value: fiat, color: "#2563eb" },
+    { name: "Gold", value: gold, color: "#eab308" },
+    { name: "Silver", value: silver, color: "#94a3b8" },
+    { name: "Cryptocurrencies", value: crypto, color: "#10b981" },
+  ];
+
+  const totalRaw = rawAssets.reduce((sum, item) => sum + item.value, 0);
+  const totalTrillions = Number(totalRaw.toFixed(2));
+  const assets = rawAssets.map((item) => ({
+    name: item.name,
+    valueTrillions: Number(item.value.toFixed(2)),
+    sharePercent: Number(((item.value / totalRaw) * 100).toFixed(2)),
+    color: item.color,
+  }));
+
+  return {
+    updatedAt: now.toISOString(),
+    totalTrillions,
+    assets,
+  };
+}
+
+async function fetchLiveCryptoTrillions() {
+  const response = await fetchWithTimeout(COINGECKO_GLOBAL_URL, "application/json");
+  if (!response.ok) {
+    throw new Error(`CoinGecko returned HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  const usdCap = payload && payload.data && payload.data.total_market_cap && Number(payload.data.total_market_cap.usd);
+  if (!Number.isFinite(usdCap) || usdCap <= 0) {
+    throw new Error("CoinGecko total_market_cap.usd was invalid");
+  }
+  return usdCap / 1e12;
+}
+
+async function handleMoneyMarket(request, env, ctx, corsHeaders) {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    ...corsHeaders,
+  };
+  const cache = typeof caches !== "undefined" && caches && caches.default ? caches.default : null;
+  const cacheKey = new Request(new URL("/api/money-market", request.url).toString(), { method: "GET" });
+
+  if (cache) {
+    try {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        const cloned = new Response(cached.body, cached);
+        Object.entries(headers).forEach(([k, v]) => cloned.headers.set(k, v));
+        return cloned;
+      }
+    } catch (error) {
+      console.error("Cache match failed:", error);
+    }
+  }
+
+  let cryptoTrillions = null;
+  try {
+    cryptoTrillions = await fetchLiveCryptoTrillions();
+  } catch (error) {
+    console.error("Falling back to baseline crypto market cap:", error);
+  }
+
+  const body = buildMoneyMarketData(cryptoTrillions, env);
+  const response = jsonResponse(body, 200, {
+    ...headers,
+    "Cache-Control": "public, max-age=3600",
+  });
+
+  if (cache) {
+    const putPromise = cache.put(cacheKey, response.clone()).catch((error) => {
+      console.error("Cache put failed:", error);
+    });
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(putPromise);
+    }
+  }
+
+  return response;
+}
+
+export default {
+  async fetch(request, env = {}, ctx) {
+    const url = new URL(request.url);
+    const isMoneyMarket = url.pathname === "/api/money-market";
+    const origin = request.headers.get("Origin") || "";
+    const cors = isMoneyMarket
+      ? {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+        }
+      : origin && ALLOWED_ORIGINS.includes(origin)
+        ? {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Vary": "Origin",
+          }
+        : { "Vary": "Origin" };
+
+    if (!isMoneyMarket && origin && !ALLOWED_ORIGINS.includes(origin)) {
       return jsonResponse({ error: "Origin not allowed" }, 403, cors);
     }
 
@@ -309,7 +421,7 @@ export default {
         status: 204,
         headers: {
           ...cors,
-          "Access-Control-Allow-Headers": "Accept",
+          "Access-Control-Allow-Headers": "Accept, Content-Type",
           "Access-Control-Max-Age": "86400",
         },
       });
@@ -322,7 +434,10 @@ export default {
       });
     }
 
-    const url = new URL(request.url);
+    if (isMoneyMarket) {
+      return handleMoneyMarket(request, env, ctx, cors);
+    }
+
     if (url.pathname !== "/listings" && url.pathname !== "/global" && url.pathname !== "/history") {
       return jsonResponse({ error: "Not found" }, 404, cors);
     }

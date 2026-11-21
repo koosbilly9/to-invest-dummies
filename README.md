@@ -7,6 +7,7 @@ A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100
 - Crypto prices: CoinMarketCap. Crypto history: Binance daily candles.
 - Index history: Yahoo Finance (`^GSPC` and `^NDX` chart API and history page fallback) and Stooq (`^spx` and `^ndx` free daily CSV feed).
 - Coronation Top 20 history: Moneyweb / ProfileData five-year daily unit trust NAV feed (`CNTF`, converted from South African cents per unit to `ZAR`).
+- Global money vs. hard assets pie chart: `GET /api/money-market` on `cloudflare/worker.js` serves Global Fiat M2 (`$103.9T`), Gold (`$24.6T`), Silver (`$2.3T`), and live total cryptocurrency market cap from CoinGecko `/api/v3/global` (`$2.0T` fallback), cached for 1 hour via `caches.default` and rendered with Chart.js.
 - Fear/greed: Alternative.me's crypto index, shown for crypto only.
 - Oversold/overbought: RSI(14), under 30/over 70. Bull/bear: latest completed close above/below its 200-day simple moving average.
 - Five-year high/low: highest daily candle high and lowest daily candle low over the available five-year history.
