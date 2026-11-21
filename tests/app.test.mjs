@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { calculateIndicators, percentClass, percentBelowHigh, sentiment } = require("../app.js");
+const {
+  calculateIndicators,
+  parseStooqCsv,
+  parseYahooChart,
+  percentClass,
+  percentBelowHigh,
+  sentiment,
+} = require("../app.js");
 
 test("calculates five-year candle extremes and the completed 200-day cycle", () => {
   const points = Array.from({ length: 220 }, (_, index) => [
@@ -44,4 +51,23 @@ test("classifies RSI bands and validates malformed market history", () => {
   assert.equal(sentiment(null).text, "n/a");
   assert.throws(() => calculateIndicators([[1, 0]]), /Invalid price history/);
   assert.throws(() => calculateIndicators([[86400000, 1], [86400000, 2]]), /Invalid price history/);
+});
+
+test("parses Stooq CSV and Yahoo chart JSON history", () => {
+  const csv = "Date,Open,High,Low,Close,Volume\n2026-11-18,5890,5910,5870,5900,100\n2026-11-19,5900,5950,5880,5920,100\n";
+  const stooqPoints = parseStooqCsv(csv);
+  assert.deepEqual(stooqPoints, [
+    [Date.UTC(2026, 10, 18), 5900, 5910, 5870],
+    [Date.UTC(2026, 10, 19), 5920, 5950, 5880],
+  ]);
+
+  const yahooPoints = parseYahooChart({
+    chart: {
+      result: [{
+        timestamp: [Date.UTC(2026, 10, 19, 14, 30) / 1000],
+        indicators: { quote: [{ close: [5920], high: [5950], low: [5880] }] },
+      }],
+    },
+  });
+  assert.deepEqual(yahooPoints, [[Date.UTC(2026, 10, 19), 5920, 5950, 5880]]);
 });

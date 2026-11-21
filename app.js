@@ -11,8 +11,8 @@
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
     { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
     { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD", url: "https://solana.com", slug: "solana" },
-    { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
-    { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", currency: "USD", url: "https://www.nasdaq.com/solutions/nasdaq-100", quoteUrl: "https://finance.yahoo.com/quote/%5ENDX/" },
+    { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", yahooSymbol: "^GSPC", stooqSymbol: "^spx", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
+    { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", yahooSymbol: "^NDX", stooqSymbol: "^ndx", currency: "USD", url: "https://www.nasdaq.com/solutions/nasdaq-100", quoteUrl: "https://finance.yahoo.com/quote/%5ENDX/" },
     { key: "CORONATION", name: "Coronation Top 20", type: "fund", currency: "ZAR" }
   ];
 
@@ -108,6 +108,119 @@
     }).finally(function () {
       clearTimeout(timer);
     });
+  }
+
+  function requestText(url) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    return fetch(url, { signal: controller.signal }).then(function (response) {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      return response.text();
+    }).catch(function (error) {
+      if (error.name === "AbortError") throw new Error("Request timed out");
+      throw error;
+    }).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function normalizeHistoryPoints(rawPoints) {
+    var today = new Date();
+    var currentUtcDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    var cutoff = currentUtcDay - 5 * 365.25 * DAY;
+    var byDay = {};
+    rawPoints.forEach(function (point) {
+      var time = number(point[0]);
+      var close = number(point[1]);
+      var high = point[2] != null ? number(point[2]) : close;
+      var low = point[3] != null ? number(point[3]) : close;
+      if (Number.isSafeInteger(time) && time >= cutoff && time < currentUtcDay &&
+          Number.isFinite(close) && close > 0 &&
+          Number.isFinite(high) && Number.isFinite(low) &&
+          high >= close && low <= close && high >= low && low > 0) {
+        byDay[time] = [time, close, high, low];
+      }
+    });
+    return Object.keys(byDay).map(function (k) { return byDay[k]; }).sort(function (a, b) {
+      return a[0] - b[0];
+    });
+  }
+
+  function parseYahooChart(payload) {
+    var result = payload && payload.chart && Array.isArray(payload.chart.result) && payload.chart.result[0];
+    var timestamps = result && result.timestamp;
+    var quote = result && result.indicators && result.indicators.quote && result.indicators.quote[0];
+    var closes = quote && quote.close;
+    var highs = quote && quote.high;
+    var lows = quote && quote.low;
+    if (!Array.isArray(timestamps) || !Array.isArray(closes) || timestamps.length !== closes.length) {
+      throw new Error("Invalid Yahoo chart response");
+    }
+    var raw = [];
+    for (var i = 0; i < timestamps.length; i++) {
+      var d = new Date(timestamps[i] * 1000);
+      var dayTime = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+      raw.push([
+        dayTime,
+        closes[i],
+        Array.isArray(highs) ? highs[i] : closes[i],
+        Array.isArray(lows) ? lows[i] : closes[i]
+      ]);
+    }
+    var points = normalizeHistoryPoints(raw);
+    if (!points.length) throw new Error("Empty Yahoo chart history");
+    return points;
+  }
+
+  function parseStooqCsv(csv) {
+    if (typeof csv !== "string" || !csv.trim()) throw new Error("Empty Stooq CSV");
+    var lines = csv.trim().split(/\r?\n/);
+    var raw = [];
+    for (var i = 1; i < lines.length; i++) {
+      var cols = lines[i].split(",");
+      if (cols.length < 5) continue;
+      var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cols[0].trim());
+      if (!match) continue;
+      var time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      raw.push([time, number(cols[4]), number(cols[2]), number(cols[3])]);
+    }
+    var points = normalizeHistoryPoints(raw);
+    if (!points.length) throw new Error("Invalid Stooq CSV history");
+    return points;
+  }
+
+  function indexHistory(asset) {
+    var yahooUrl = "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(asset.yahooSymbol) + "?range=5y&interval=1d";
+    var stooqUrl = "https://stooq.com/q/d/l/?s=" + encodeURIComponent(asset.stooqSymbol) + "&i=d";
+    var attempts = [
+      function () {
+        return workerJson("/history?asset=" + encodeURIComponent(asset.ticker)).then(function (response) {
+          if (!response || !Array.isArray(response.points)) throw new Error("Invalid history response");
+          return response.points;
+        });
+      },
+      function () {
+        return requestJson("https://api.allorigins.win/raw?url=" + encodeURIComponent(yahooUrl)).then(parseYahooChart);
+      },
+      function () {
+        return requestText("https://api.allorigins.win/raw?url=" + encodeURIComponent(stooqUrl)).then(parseStooqCsv);
+      },
+      function () {
+        return requestJson("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(yahooUrl)).then(parseYahooChart);
+      },
+      function () {
+        return requestText("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(stooqUrl)).then(parseStooqCsv);
+      }
+    ];
+    var index = 0;
+    function next(lastError) {
+      if (index >= attempts.length) return Promise.reject(lastError || new Error("History unavailable"));
+      var attempt = attempts[index++];
+      return attempt().catch(function (error) {
+        return next(error);
+      });
+    }
+    return next();
   }
 
   function workerJson(path) {
@@ -301,9 +414,8 @@
         ["BTC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
       }),
       Promise.all(ASSETS.filter(function (asset) { return asset.type === "index"; }).map(function (asset) {
-        return workerJson("/history?asset=" + encodeURIComponent(asset.ticker)).then(function (response) {
-          if (!response || !Array.isArray(response.points)) throw new Error("Invalid history response");
-          data[asset.key] = { indicators: calculateIndicators(response.points) };
+        return indexHistory(asset).then(function (points) {
+          data[asset.key] = { indicators: calculateIndicators(points) };
         }).catch(function (error) {
           data[asset.key] = { error: "History unavailable" };
           errors.push(asset.name + ": " + error.message);
@@ -344,6 +456,8 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       calculateIndicators: calculateIndicators,
+      parseStooqCsv: parseStooqCsv,
+      parseYahooChart: parseYahooChart,
       percentClass: percentClass,
       percentBelowHigh: percentBelowHigh,
       sentiment: sentiment
