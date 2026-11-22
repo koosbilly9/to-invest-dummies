@@ -637,6 +637,12 @@
       : "";
   }
 
+  function ma200ValueClass(current, ma200) {
+    return Number.isFinite(current) && Number.isFinite(ma200) && ma200 > current
+      ? "positive"
+      : "";
+  }
+
   function render(data, timestamp) {
     var rows = ASSETS.map(function (asset) {
       var result = data[asset.key] || {};
@@ -669,7 +675,7 @@
         '<td class="value ' + currentPriceClass(indicators.current, indicators.ma200) + '">' + formatPrice(indicators.current, asset.currency) + "</td>" +
         '<td class="value ' + percentClass(percentBelow) + '">' + displayPercent(percentBelow) + "</td>" +
         '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
-        '<td class="value">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
+        '<td class="value ' + ma200ValueClass(indicators.current, indicators.ma200) + '">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
         "<td>" + fear + "</td>" +
         '<td class="' + cycleClass + '">' + (cycle || "—") + "</td>" +
         "</tr>";
@@ -784,6 +790,7 @@
       percentClass: percentClass,
       percentBelowHigh: percentBelowHigh,
       currentPriceClass: currentPriceClass,
+      ma200ValueClass: ma200ValueClass,
       sentiment: sentiment
     };
   }

@@ -13,6 +13,7 @@ const {
   percentClass,
   percentBelowHigh,
   currentPriceClass,
+  ma200ValueClass,
   sentiment,
 } = require("../app.js");
 
@@ -51,6 +52,13 @@ test("colors only a current price below MA 200 Dy green", () => {
   assert.equal(currentPriceClass(100, 100), "");
   assert.equal(currentPriceClass(105, 100), "");
   assert.equal(currentPriceClass(null, 100), "");
+});
+
+test("colors only an MA 200 Dy value above the current price green", () => {
+  assert.equal(ma200ValueClass(95, 100), "positive");
+  assert.equal(ma200ValueClass(100, 100), "");
+  assert.equal(ma200ValueClass(105, 100), "");
+  assert.equal(ma200ValueClass(95, null), "");
 });
 
 test("classifies RSI bands and validates malformed market history", () => {
