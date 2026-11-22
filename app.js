@@ -631,10 +631,15 @@
       : null;
   }
 
+  function currentPriceClass(current, ma200) {
+    return Number.isFinite(current) && Number.isFinite(ma200) && current < ma200
+      ? "positive"
+      : "";
+  }
+
   function render(data, timestamp) {
     var rows = ASSETS.map(function (asset) {
       var result = data[asset.key] || {};
-      var signal = sentiment(result.indicators ? result.indicators.rsi : null);
       var cycle = result.indicators && result.indicators.cycle;
       var cycleClass = cycle === "Bull" ? "positive" : cycle === "Bear" ? "negative" : "";
       var percentBelow = percentBelowHigh(
@@ -660,13 +665,12 @@
         : escapeHtml(asset.key);
       return "<tr>" +
         '<td><div class="asset"><span class="coin-icon">' + escapeHtml(asset.key === "NASDAQ100" ? "N100" : asset.key === "CORONATION" ? "C20" : asset.key === "SP500" ? "S&P" : asset.key) + '</span><div><div class="asset-name">' + nameHtml + '</div><div class="asset-sub">' + tickerHtml + status + "</div></div></div></td>" +
-        "<td>" + fear + "</td>" +
-        '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
         '<td class="value">' + formatPrice(result.indicators && result.indicators.low, asset.currency) + "</td>" +
-        '<td><span class="sentiment ' + signal.cls + '">' + signal.text + "</span></td>" +
-        '<td class="value">' + formatPrice(indicators.current, asset.currency) + "</td>" +
-        '<td class="value">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
+        '<td class="value ' + currentPriceClass(indicators.current, indicators.ma200) + '">' + formatPrice(indicators.current, asset.currency) + "</td>" +
         '<td class="value ' + percentClass(percentBelow) + '">' + displayPercent(percentBelow) + "</td>" +
+        '<td class="value">' + formatPrice(result.indicators && result.indicators.high, asset.currency) + "</td>" +
+        '<td class="value">' + formatPrice(indicators.ma200, asset.currency) + "</td>" +
+        "<td>" + fear + "</td>" +
         '<td class="' + cycleClass + '">' + (cycle || "—") + "</td>" +
         "</tr>";
     });
@@ -779,6 +783,7 @@
       parseYahooChart: parseYahooChart,
       percentClass: percentClass,
       percentBelowHigh: percentBelowHigh,
+      currentPriceClass: currentPriceClass,
       sentiment: sentiment
     };
   }

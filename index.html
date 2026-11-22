@@ -215,27 +215,24 @@
             <thead>
               <tr>
                 <th scope="col">Asset</th>
-                <th scope="col">Fear / greed</th>
-                <th scope="col">5y high</th>
                 <th scope="col">5y low</th>
-                <th scope="col">Oversold / bought</th>
                 <th scope="col">Current price</th>
-                <th scope="col">MA 200 Dy</th>
                 <th scope="col">% &lt; 5y high</th>
+                <th scope="col">5y high</th>
+                <th scope="col">MA 200 Dy</th>
+                <th scope="col">Fear / greed</th>
                 <th scope="col">Cycle</th>
               </tr>
             </thead>
             <tbody id="assets">
-              <tr><td colspan="9" class="message">Loading prices and indicators…</td></tr>
+              <tr><td colspan="8" class="message">Loading prices and indicators…</td></tr>
             </tbody>
           </table>
         </div>
         <div class="message" id="notice" role="status"></div>
         <div class="legend" aria-label="Indicator definitions">
-          <span><i class="dot" aria-hidden="true"></i> Oversold / bull / &gt;40% below 5y high</span>
-          <span><i class="dot red" aria-hidden="true"></i> Overbought / bear</span>
+          <span><i class="dot" aria-hidden="true"></i> Current price below MA 200 Dy</span>
           <span><i class="dot orange" aria-hidden="true"></i> Within 10% of 5y high</span>
-          <span>RSI(14): under 30 = oversold, over 70 = overbought</span>
         </div>
       </section>
       <section class="board" aria-labelledby="money-market-heading">
@@ -255,7 +252,7 @@
       </section>
     </main>
     <footer>
-      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Coronation Top 20 (Class A, JSE code CNTF) five-year daily NAV history is sourced from Moneyweb / ProfileData. Global money market cap compares baseline Global Fiat M2 ($103.9T), Gold ($24.6T), and Silver ($2.3T) with live total cryptocurrency market cap from CoinGecko ($2.0T fallback). Fear/greed is Alternative.me’s crypto index and appears only for crypto. Five-year highs/lows use available daily history; MA200 is the 200-day simple moving average; % below compares current price with the five-year high. Oversold/bought uses RSI(14), a momentum indicator. Feeds can be delayed or incomplete. This page is for education, not financial advice.
+      Cryptocurrency prices are from CoinMarketCap; crypto history is from Binance. S&amp;P 500 and Nasdaq 100 history is from Yahoo Finance and Stooq. Coronation Top 20 (Class A, JSE code CNTF) five-year daily NAV history is sourced from Moneyweb / ProfileData. Global money market cap compares baseline Global Fiat M2 ($103.9T), Gold ($24.6T), and Silver ($2.3T) with live total cryptocurrency market cap from CoinGecko ($2.0T fallback). Fear/greed is Alternative.me’s crypto index and appears only for crypto. Five-year highs/lows use available daily history; MA 200 Dy is the 200-day simple moving average; % below compares current price with the five-year high. Feeds can be delayed or incomplete. This page is for education, not financial advice.
     </footer>
   </div>
   <script src="app.js"></script>

@@ -12,6 +12,7 @@ const {
   parseYahooChart,
   percentClass,
   percentBelowHigh,
+  currentPriceClass,
   sentiment,
 } = require("../app.js");
 
@@ -43,6 +44,13 @@ test("colors the percentage below the five-year high by the specified bands", ()
   assert.equal(percentClass(40.01), "percent-good");
   assert.equal(percentClass(41), "percent-good");
   assert.equal(percentClass(null), "");
+});
+
+test("colors only a current price below MA 200 Dy green", () => {
+  assert.equal(currentPriceClass(95, 100), "positive");
+  assert.equal(currentPriceClass(100, 100), "");
+  assert.equal(currentPriceClass(105, 100), "");
+  assert.equal(currentPriceClass(null, 100), "");
 });
 
 test("classifies RSI bands and validates malformed market history", () => {
