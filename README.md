@@ -1,6 +1,6 @@
 # Invest like a dummy
 
-A static, single-page market snapshot for BTC, ETH, SOL, the S&P 500, Nasdaq 100, and Coronation Top 20.
+A static, single-page market snapshot for BTC, ZEC, ETH, SOL, the S&P 500, Nasdaq 100, and Coronation Top 20.
 
 ## Data and indicators
 

@@ -6,7 +6,7 @@
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
   var COINGECKO_GLOBAL = "https://api.coingecko.com/api/v3/global";
-  var CACHE_KEY = "invest-dummies-market-v5";
+  var CACHE_KEY = "invest-dummies-market-v6";
   var CACHE_MS = 60 * 60 * 1000;
   var MONEY_MARKET_BASELINES = {
     fiat: 103.9,
@@ -16,6 +16,7 @@
   };
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
+    { key: "ZEC", name: "Zcash", type: "crypto", symbol: "ZECUSDT", currency: "USD", url: "https://z.cash", slug: "zcash" },
     { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
     { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD", url: "https://solana.com", slug: "solana" },
     { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", yahooSymbol: "^GSPC", stooqSymbol: "^spx", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
@@ -717,7 +718,11 @@
             : item && Array.isArray(item.quote)
               ? item.quote.filter(function (value) { return value && value.symbol === "USD"; })[0]
               : null;
-          if (!quote) throw new Error("CoinMarketCap has no USD listing for " + asset.key);
+          if (!quote) {
+            data[asset.key] = { error: "CoinMarketCap has no USD listing" };
+            errors.push(asset.key + " price: CoinMarketCap has no USD listing");
+            return Promise.resolve();
+          }
           return cryptoHistory(asset.symbol).then(function (history) {
             var indicators = calculateIndicators(history);
             var current = number(quote.price);
@@ -735,7 +740,7 @@
         }));
       }).catch(function (error) {
         errors.push("Crypto feed: " + error.message);
-        ["BTC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
+        ["BTC", "ZEC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
       }),
       Promise.all(ASSETS.filter(function (asset) { return asset.type === "index" || asset.type === "fund"; }).map(function (asset) {
         return indexHistory(asset).then(function (points) {
