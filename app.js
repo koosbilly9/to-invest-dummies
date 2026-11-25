@@ -6,7 +6,7 @@
   var BINANCE = "https://data-api.binance.vision/api/v3/klines";
   var FNG = "https://api.alternative.me/fng/";
   var COINGECKO_GLOBAL = "https://api.coingecko.com/api/v3/global";
-  var CACHE_KEY = "invest-dummies-market-v6";
+  var CACHE_KEY = "invest-dummies-market-v7";
   var CACHE_MS = 60 * 60 * 1000;
   var MONEY_MARKET_BASELINES = {
     fiat: 103.9,
@@ -16,9 +16,7 @@
   };
   var ASSETS = [
     { key: "BTC", name: "Bitcoin", type: "crypto", symbol: "BTCUSDT", currency: "USD", url: "https://bitcoin.org", slug: "bitcoin" },
-    { key: "ZEC", name: "Zcash", type: "crypto", symbol: "ZECUSDT", currency: "USD", url: "https://z.cash", slug: "zcash" },
     { key: "ETH", name: "Ethereum", type: "crypto", symbol: "ETHUSDT", currency: "USD", url: "https://ethereum.org", slug: "ethereum" },
-    { key: "SOL", name: "Solana", type: "crypto", symbol: "SOLUSDT", currency: "USD", url: "https://solana.com", slug: "solana" },
     { key: "SP500", name: "S&P 500", type: "index", ticker: "sp500", yahooSymbol: "^GSPC", stooqSymbol: "^spx", currency: "USD", url: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", quoteUrl: "https://finance.yahoo.com/quote/%5EGSPC/" },
     { key: "NASDAQ100", name: "Nasdaq 100", type: "index", ticker: "nasdaq100", yahooSymbol: "^NDX", stooqSymbol: "^ndx", currency: "USD", url: "https://www.nasdaq.com/solutions/nasdaq-100", quoteUrl: "https://finance.yahoo.com/quote/%5ENDX/" },
     { key: "CORONATION", name: "Coronation Top 20", type: "fund", ticker: "coronation", moneywebCode: "CNTF", currency: "ZAR", url: "https://www.coronation.com/en-za/personal/funds/top-20/", quoteUrl: "https://www.moneyweb.co.za/tools-and-data/click-a-unit-trust/CNTF/" }
@@ -740,7 +738,7 @@
         }));
       }).catch(function (error) {
         errors.push("Crypto feed: " + error.message);
-        ["BTC", "ZEC", "ETH", "SOL"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
+        ["BTC", "ETH"].forEach(function (key) { data[key] = { error: "Feed unavailable" }; });
       }),
       Promise.all(ASSETS.filter(function (asset) { return asset.type === "index" || asset.type === "fund"; }).map(function (asset) {
         return indexHistory(asset).then(function (points) {
